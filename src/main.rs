@@ -9,6 +9,7 @@ use std::path::Path;
 use utils::{get_epoch, get_proposals};
 use tendermint_rpc::{self, HttpClient};
 use tower_http::cors::{CorsLayer, Any};
+use crate::utils::{get_balance, get_epoch_at_height};
 
 mod utils;
 
@@ -44,6 +45,9 @@ async fn main() {
         .route("/", get(|| async { "Namada REST API Running" }))
         .route("/proposal_result/:id", get(get_proposals))
         .route("/epoch", get(get_epoch))
+        .route("/epoch_at_height/:height", get(get_epoch_at_height))
+        .route("/balance/:wallet",get(get_balance))
+
         .with_state(ServerState { client: client, config: config.clone() })
         .layer(
             CorsLayer::new()
