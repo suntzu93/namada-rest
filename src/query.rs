@@ -81,15 +81,13 @@ struct GovernanceParametersWrapper {
 pub struct VoteWrapper {
     validator: String,
     delegator: String,
-    data: String, // Replace with appropriate type
+    data: String,
 }
 
 #[derive(Serialize)]
 pub struct EventSerializable {
     event_type: String,
-    // This might be another type that implements Serialize in your use case.
     level: String,
-    // This might be another type that implements Serialize in your use case.
     attributes: HashMap<String, String>,
 }
 
@@ -249,17 +247,18 @@ pub async fn get_rpc_data(
                     .await
                     .map(RPCResult::ValidatorConsensusKeys),
                 RPCRequestType::QueryTxEvents(tx_hash) => {
+
+                    // In case search event_type Applied return None then we will search with Accepted
                     match rpc::query_tx_events(&client, TxEventQuery::Applied(&tx_hash)).await {
                         Ok(Some(event)) => Ok(RPCResult::TxEvents(event)),
                         Ok(None) => {
                             match rpc::query_tx_events(&client, TxEventQuery::Accepted(&tx_hash)).await {
                                 Ok(Some(event)) => Ok(RPCResult::TxEvents(event)),
-                                Ok(None) => Err(error::Error::Other("Cannot find tx events for your transaction".to_string())),
-                                Err(err) => Err(error::Error::Other("Err find tx events for your transaction".to_string())),
+                                Ok(None) => Err(error::Error::Other("Unable to find tx events for your transaction.".to_string())),
+                                Err(err) => Err(error::Error::Other("Error to find tx events for your transaction.".to_string())),
                             }
-                            // Err(error::Error::Other("Cann't find tx events for your transaction".to_string())),
                         }
-                        Err(err) => Err(error::Error::Other("Err find tx events for your transaction".to_string())),
+                        Err(err) => Err(error::Error::Other("Error find tx events for your transaction".to_string())),
                     }
                 }
             }
