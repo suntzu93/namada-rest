@@ -6,12 +6,12 @@ use serde::{Deserialize, Serialize};
 use std::process;
 use std::{fs};
 use std::path::Path;
-use utils::{get_epoch, get_proposals};
+use query::{get_epoch, get_proposals};
 use tendermint_rpc::{self, HttpClient};
 use tower_http::cors::{CorsLayer, Any};
-use crate::utils::{get_balance, get_epoch_at_height};
+use crate::query::{check_steward, get_balance, get_delegators_delegation, get_delegators_delegation_at, get_epoch_at_height, get_governance_parameters, get_meta_data, get_proposal_votes, get_tx_events, get_validator_consensus_keys, get_validator_state};
 
-mod utils;
+mod query;
 
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -47,6 +47,16 @@ async fn main() {
         .route("/epoch", get(get_epoch))
         .route("/epoch_at_height/:height", get(get_epoch_at_height))
         .route("/balance/:wallet",get(get_balance))
+        .route("/validator_state/:address/:epoch",get(get_validator_state))
+        .route("/delegator_delegation/:wallet",get(get_delegators_delegation))
+        .route("/delegator_delegation_at/:wallet/:epoch",get(get_delegators_delegation_at))
+        .route("/metadata/:address/:epoch",get(get_meta_data))
+        .route("/governance", get(get_governance_parameters))
+        .route("/proposal_votes/:id", get(get_proposal_votes))
+        .route("/is_steward/:wallet",get(check_steward))
+        .route("/validator_consensus_keys/:wallet",get(get_validator_consensus_keys))
+        .route("/tx_event/:tx_hash",get(get_tx_events))
+
 
         .with_state(ServerState { client: client, config: config.clone() })
         .layer(
