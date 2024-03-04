@@ -9,7 +9,7 @@ use std::path::Path;
 use query::{get_epoch, get_proposals};
 use tendermint_rpc::{self, HttpClient};
 use tower_http::cors::{CorsLayer, Any};
-use crate::query::{check_steward, get_balance, get_delegators_delegation, get_delegators_delegation_at, get_epoch_at_height, get_governance_parameters, get_meta_data, get_proposal_votes, get_tx_events, get_validator_consensus_keys, get_validator_state};
+use crate::query::{check_is_delegator, check_is_validator, check_steward, get_balance, get_delegators_delegation, get_delegators_delegation_at, get_epoch_at_height, get_governance_parameters, get_latest_block, get_masp_reward, get_meta_data, get_native_token, get_pos_parameters, get_proposal_votes, get_total_staked_tokens, get_tx_events, get_validator_consensus_keys, get_validator_stake, get_validator_state};
 
 mod query;
 
@@ -52,10 +52,18 @@ async fn main() {
         .route("/delegator_delegation_at/:wallet/:epoch",get(get_delegators_delegation_at))
         .route("/metadata/:address/:epoch",get(get_meta_data))
         .route("/governance", get(get_governance_parameters))
+        .route("/pos_params", get(get_pos_parameters))
         .route("/proposal_votes/:id", get(get_proposal_votes))
         .route("/is_steward/:wallet",get(check_steward))
         .route("/validator_consensus_keys/:wallet",get(get_validator_consensus_keys))
         .route("/tx_event/:tx_hash",get(get_tx_events))
+        .route("/native_token",get(get_native_token))
+        .route("/query_block",get(get_latest_block))
+        .route("/is_validator/:wallet",get(check_is_validator))
+        .route("/is_delegator/:wallet",get(check_is_delegator))
+        .route("/masp_reward",get(get_masp_reward))
+        .route("/total_staked/:epoch",get(get_total_staked_tokens))
+        .route("/validator_stake/:address/:epoch",get(get_validator_stake))
 
 
         .with_state(ServerState { client: client, config: config.clone() })

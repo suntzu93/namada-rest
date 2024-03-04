@@ -17,12 +17,16 @@ use namada_sdk::error::{EncodingError};
 use namada_sdk::events::Event;
 use namada_sdk::governance::parameters::GovernanceParameters;
 use namada_sdk::governance::utils::Vote;
+use namada_sdk::masp::MaspTokenRewardData;
+use namada_sdk::proof_of_stake::{PosParams};
 use namada_sdk::proof_of_stake::types::{CommissionPair, ValidatorMetaData, ValidatorState};
 use namada_sdk::rpc::{TxEventQuery};
-use namada_sdk::state::BlockHeight;
+use namada_sdk::state::{BlockHash, BlockHeight, LastBlock};
 use namada_sdk::types::address::Address;
 use namada_sdk::types::key::common;
+use namada_sdk::types::time::DateTimeUtc;
 use namada_sdk::types::token;
+use namada_sdk::types::uint::Uint;
 use serde::{Serialize, Serializer};
 use serde_json::{json, Value};
 use tendermint_rpc::{self, HttpClient};
@@ -40,9 +44,17 @@ pub enum RPCRequestType {
     QueryDelegatorDelegationAt(Address, Epoch),
     QueryMetaData(Address, Option<Epoch>),
     QueryGovernanceParameters,
+    QueryPosParameters,
     QueryCheckIsSteward(Address),
     QueryValidatorConsensusKeys(Address),
     QueryTxEvents(String),
+    QueryNativeToken,
+    QueryLatestBlock,
+    QueryCheckIsValidator(Address),
+    QueryCheckIsDelegator(Address),
+    QueryMaspReward,
+    QueryTotalStakedTokens(Epoch),
+    QueryValidatorStaked(Epoch, Address),
 }
 
 pub enum RPCResult {
@@ -56,9 +68,17 @@ pub enum RPCResult {
     DelegatorDelegationAt(HashMap<Address, token::Amount>),
     MetaData((Option<ValidatorMetaData>, Option<CommissionPair>)),
     GovernanceParameters(GovernanceParameters),
+    PosParameters(PosParams),
     IsSteward(bool),
     ValidatorConsensusKeys(Option<common::PublicKey>),
     TxEvents(Event),
+    NativeToken(Address),
+    LatestBlock(Option<LastBlock>),
+    IsValidator(bool),
+    IsDelegator(bool),
+    MapsReward(Vec<MaspTokenRewardData>),
+    TotalStakedTokens(token::Amount),
+    ValidatorStake(token::Amount),
 }
 
 #[derive(Serialize)]
@@ -78,6 +98,32 @@ struct GovernanceParametersWrapper {
 }
 
 #[derive(Serialize)]
+pub struct SerializableOwnedPosParams {
+    pub max_validator_slots: u64,
+    pub pipeline_len: u64,
+    pub unbonding_len: u64,
+    pub tm_votes_per_token: String,
+    pub block_proposer_reward: String,
+    pub block_vote_reward: String,
+    pub max_inflation_rate: String,
+    pub target_staked_ratio: String,
+    pub duplicate_vote_min_slash_rate: String,
+    pub light_client_attack_min_slash_rate: String,
+    pub cubic_slashing_window_length: u64,
+    pub validator_stake_threshold: String,
+    pub liveness_window_check: u64,
+    pub liveness_threshold: String,
+    pub rewards_gain_p: String,
+    pub rewards_gain_d: String,
+}
+
+#[derive(Serialize)]
+pub struct SerializablePosParams {
+    pub owned: SerializableOwnedPosParams,
+    pub max_proposal_period: u64,
+}
+
+#[derive(Serialize)]
 pub struct VoteWrapper {
     validator: String,
     delegator: String,
@@ -89,6 +135,23 @@ pub struct EventSerializable {
     event_type: String,
     level: String,
     attributes: HashMap<String, String>,
+}
+
+#[derive(Serialize)]
+struct SerializableLastBlock {
+    height: BlockHeight,
+    hash: BlockHash,
+    time: DateTimeUtc,
+}
+
+#[derive(Serialize)]
+struct MaspTokenRewardDataWrapper {
+    pub name: String,
+    pub address: Address,
+    pub max_reward_rate: Dec,
+    pub kp_gain: Dec,
+    pub kd_gain: Dec,
+    pub locked_amount_target: Uint,
 }
 
 pub struct MyErrorWrapper(error::Error);
@@ -151,6 +214,10 @@ pub async fn get_governance_parameters(State(state): State<ServerState>) -> Resu
     get_rpc_data(state.client, RPCRequestType::QueryGovernanceParameters).await
 }
 
+pub async fn get_pos_parameters(State(state): State<ServerState>) -> Result<Json<Value>, MyErrorWrapper> {
+    get_rpc_data(state.client, RPCRequestType::QueryPosParameters).await
+}
+
 pub async fn check_steward(State(state): State<ServerState>,
                            Path(address): Path<Address>) -> Result<Json<Value>, MyErrorWrapper> {
     get_rpc_data(state.client, RPCRequestType::QueryCheckIsSteward(address)).await
@@ -182,6 +249,38 @@ pub async fn get_tx_events(State(state): State<ServerState>,
     }
 }
 
+pub async fn get_native_token(State(state): State<ServerState>) -> Result<Json<Value>, MyErrorWrapper> {
+    get_rpc_data(state.client, RPCRequestType::QueryNativeToken).await
+}
+
+pub async fn get_latest_block(State(state): State<ServerState>) -> Result<Json<Value>, MyErrorWrapper> {
+    get_rpc_data(state.client, RPCRequestType::QueryLatestBlock).await
+}
+
+pub async fn check_is_validator(State(state): State<ServerState>,
+                                Path(address): Path<Address>, ) -> Result<Json<Value>, MyErrorWrapper> {
+    get_rpc_data(state.client, RPCRequestType::QueryCheckIsValidator(address)).await
+}
+
+pub async fn check_is_delegator(State(state): State<ServerState>,
+                                Path(address): Path<Address>, ) -> Result<Json<Value>, MyErrorWrapper> {
+    get_rpc_data(state.client, RPCRequestType::QueryCheckIsDelegator(address)).await
+}
+
+pub async fn get_masp_reward(State(state): State<ServerState>) -> Result<Json<Value>, MyErrorWrapper> {
+    get_rpc_data(state.client, RPCRequestType::QueryMaspReward).await
+}
+
+pub async fn get_total_staked_tokens(State(state): State<ServerState>,
+                                     Path(epoch): Path<Epoch>, ) -> Result<Json<Value>, MyErrorWrapper> {
+    get_rpc_data(state.client, RPCRequestType::QueryTotalStakedTokens(epoch)).await
+}
+
+pub async fn get_validator_stake(State(state): State<ServerState>,
+                                 Path((address, epoch)): Path<(Address, Epoch)>, ) -> Result<Json<Value>, MyErrorWrapper> {
+    get_rpc_data(state.client, RPCRequestType::QueryValidatorStaked(epoch, address)).await
+}
+
 pub fn serialize<S>(public_key: &Option<common::PublicKey>, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
@@ -195,9 +294,44 @@ pub fn serialize<S>(public_key: &Option<common::PublicKey>, serializer: S) -> Re
 
 fn to_serializable(event: Event) -> EventSerializable {
     EventSerializable {
-        event_type: format!("{:?}", event.event_type), // replace this if the event_type implements Serialize.
-        level: format!("{:?}", event.level), // replace this if event.level implements Serialize.
+        event_type: format!("{:?}", event.event_type),
+        level: format!("{:?}", event.level),
         attributes: event.attributes,
+    }
+}
+
+fn block_to_serializable(last_block: &LastBlock) -> SerializableLastBlock {
+    SerializableLastBlock {
+        height: last_block.height.clone(),
+        hash: last_block.hash.clone(),
+        time: last_block.time,
+    }
+}
+
+fn convert_to_serializable_pos(pos_params: PosParams) -> SerializablePosParams {
+    let owned_params = pos_params.owned;
+    let serializable_owned_pos_params = SerializableOwnedPosParams {
+        max_validator_slots: owned_params.max_validator_slots,
+        pipeline_len: owned_params.pipeline_len,
+        unbonding_len: owned_params.unbonding_len,
+        tm_votes_per_token: owned_params.tm_votes_per_token.to_string(),
+        block_proposer_reward: owned_params.block_proposer_reward.to_string(),
+        block_vote_reward: owned_params.block_vote_reward.to_string(),
+        max_inflation_rate: owned_params.max_inflation_rate.to_string(),
+        target_staked_ratio: owned_params.target_staked_ratio.to_string(),
+        duplicate_vote_min_slash_rate: owned_params.duplicate_vote_min_slash_rate.to_string(),
+        light_client_attack_min_slash_rate: owned_params.light_client_attack_min_slash_rate.to_string(),
+        cubic_slashing_window_length: owned_params.cubic_slashing_window_length,
+        validator_stake_threshold: owned_params.validator_stake_threshold.to_string(),
+        liveness_window_check: owned_params.liveness_window_check,
+        liveness_threshold: owned_params.liveness_threshold.to_string(),
+        rewards_gain_p: owned_params.rewards_gain_p.to_string(),
+        rewards_gain_d: owned_params.rewards_gain_d.to_string(),
+    };
+
+    SerializablePosParams {
+        owned: serializable_owned_pos_params,
+        max_proposal_period: pos_params.max_proposal_period,
     }
 }
 
@@ -239,6 +373,9 @@ pub async fn get_rpc_data(
                     let result = rpc::query_governance_parameters(&client).await;
                     Ok(RPCResult::GovernanceParameters(result))
                 }
+                RPCRequestType::QueryPosParameters => rpc::get_pos_params(&client)
+                    .await
+                    .map(RPCResult::PosParameters),
                 RPCRequestType::QueryCheckIsSteward(address) => {
                     let result = rpc::is_steward(&client, &address).await;
                     Ok(RPCResult::IsSteward(result))
@@ -261,6 +398,23 @@ pub async fn get_rpc_data(
                         Err(err) => Err(error::Error::Other("Error find tx events for your transaction".to_string())),
                     }
                 }
+                RPCRequestType::QueryNativeToken => rpc::query_native_token(&client).await.map(RPCResult::NativeToken),
+                RPCRequestType::QueryLatestBlock => rpc::query_block(&client).await.map(RPCResult::LatestBlock),
+                RPCRequestType::QueryCheckIsValidator(address) => rpc::is_validator(&client, &address)
+                    .await
+                    .map(RPCResult::IsValidator),
+                RPCRequestType::QueryCheckIsDelegator(address) => rpc::is_delegator(&client, &address)
+                    .await
+                    .map(RPCResult::IsDelegator),
+                RPCRequestType::QueryMaspReward => rpc::query_masp_reward_tokens(&client)
+                    .await
+                    .map(RPCResult::MapsReward),
+                RPCRequestType::QueryTotalStakedTokens(epoch) => rpc::get_total_staked_tokens(&client, epoch)
+                    .await
+                    .map(RPCResult::TotalStakedTokens),
+                RPCRequestType::QueryValidatorStaked(epoch, address) => rpc::get_validator_stake(&client, epoch, &address)
+                    .await
+                    .map(RPCResult::TotalStakedTokens),
             }
         })
     })
@@ -323,9 +477,7 @@ pub async fn get_rpc_data(
                     }).collect::<Vec<_>>();
                     Json(json!({ "data": wrapped }))
                 }
-                RPCResult::BalanceResult(amount) => {
-                    Json(json!({ "balance": amount }))
-                }
+                RPCResult::BalanceResult(amount) => Json(json!({ "balance": amount })),
                 RPCResult::ValidatorState(maybe_validator_state) => match maybe_validator_state {
                     Some(validator_state) => {
                         match validator_state {
@@ -365,7 +517,12 @@ pub async fn get_rpc_data(
                     };
                     Json(json!({ "data": wrapped }))
                 }
-                RPCResult::IsSteward(result) => Json(json!({ "isSteward": result })),
+                RPCResult::PosParameters(pos) => {
+                    let serialized_pos_params = convert_to_serializable_pos(pos);
+                    let json_pos_params = serde_json::to_value(&serialized_pos_params).unwrap();
+                    Json(json!({ "data": json_pos_params }))
+                }
+                RPCResult::IsSteward(result) => Json(json!({ "data": result })),
                 RPCResult::ValidatorConsensusKeys(result) => {
                     Json(json!({ "data": serialize(&result, serde_json::value::Serializer).unwrap() }))
                 }
@@ -373,6 +530,34 @@ pub async fn get_rpc_data(
                     let serializable_event = to_serializable(event);
                     Json(json!({ "data": serializable_event }))
                 }
+                RPCResult::NativeToken(token) => Json(json!({ "address": token })),
+                RPCResult::LatestBlock(last_block) => match last_block {
+                    Some(last_block) => {
+                        let serializable_block = block_to_serializable(&last_block);
+                        let json_last_block = serde_json::to_value(&serializable_block).unwrap();
+                        Json(json!({ "data": json_last_block }))
+                    }
+                    None => {
+                        Json(json!({ "data": "Error to query latest block" }))
+                    }
+                },
+                RPCResult::IsValidator(isValidator) => Json(json!({ "data": isValidator })),
+                RPCResult::IsDelegator(isDelegator) => Json(json!({ "data": isDelegator })),
+                RPCResult::MapsReward(rewards) => {
+                    let wrapped = rewards.into_iter().map(|masp_reward| {
+                        MaspTokenRewardDataWrapper {
+                            name: masp_reward.name,
+                            address: masp_reward.address,
+                            max_reward_rate: masp_reward.max_reward_rate,
+                            kp_gain: masp_reward.kp_gain,
+                            kd_gain: masp_reward.kd_gain,
+                            locked_amount_target: masp_reward.locked_amount_target,
+                        }
+                    }).collect::<Vec<_>>();
+                    Json(json!({ "data": wrapped }))
+                }
+                RPCResult::TotalStakedTokens(amount) => Json(json!({ "total": amount })),
+                RPCResult::ValidatorStake(amount) => Json(json!({ "total": amount }))
             }
         })
         .map_err(MyErrorWrapper)
