@@ -541,8 +541,8 @@ pub async fn get_rpc_data(
                         Json(json!({ "data": "Error to query latest block" }))
                     }
                 },
-                RPCResult::IsValidator(isValidator) => Json(json!({ "data": isValidator })),
-                RPCResult::IsDelegator(isDelegator) => Json(json!({ "data": isDelegator })),
+                RPCResult::IsValidator(is_validator) => Json(json!({ "data": is_validator })),
+                RPCResult::IsDelegator(is_delegator) => Json(json!({ "data": is_delegator })),
                 RPCResult::MapsReward(rewards) => {
                     let wrapped = rewards.into_iter().map(|masp_reward| {
                         MaspTokenRewardDataWrapper {
